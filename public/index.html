@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fruit & Vegetable Classifier</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        text-align: center;
+      }
+      #video {
+        width: 300px;
+        height: auto;
+        border: 2px solid #ccc;
+      }
+      #preview {
+        width: 300px;
+        height: auto;
+        display: none;
+      }
+      button {
+        margin: 10px;
+        padding: 10px 20px;
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Fruit & Vegetable Classifier</h1>
+    <video id="video" autoplay></video>
+    <canvas id="canvas" style="display: none"></canvas>
+    <img id="preview" alt="Captured image" />
+    <div>
+      <button id="capture">Capture & Classify</button>
+    </div>
+    <h2>Historial de Clasificaciones</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Etiqueta</th>
+          <th>Confianza</th>
+          <th>Fecha</th>
+        </tr>
+      </thead>
+      <tbody id="historyTable">
+        <!-- Aquí se llenará el historial -->
+      </tbody>
+    </table>
+    <script>
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("canvas");
+      const preview = document.getElementById("preview");
+
+      // Start the webcam
+      async function startWebcam() {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+        });
+        video.srcObject = stream;
+      }
+
+      // Capture image from video
+      function captureImage() {
+        const context = canvas.getContext("2d");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const dataUrl = canvas.toDataURL("image/png");
+        preview.src = dataUrl;
+        preview.style.display = "block";
+
+        return dataUrl;
+      }
+
+      // Load MobileNet and classify the image
+      async function classifyImage(imageElement) {
+        const model = await mobilenet.load();
+        const predictions = await model.classify(imageElement);
+        console.log(predictions);
+        return predictions;
+      }
+
+      // Filter for fruits and vegetables
+      function filterFruitsAndVegetables(predictions) {
+        const keywords = [
+          "fruit",
+          "vegetable",
+          "banana",
+          "apple",
+          "tomato",
+          "carrot",
+          "potato",
+          "cucumber",
+          "orange",
+          "grape",
+        ];
+
+        return predictions.filter((p) =>
+          keywords.some((word) => p.className.toLowerCase().includes(word))
+        );
+      }
+
+      // Handle capture and classification
+      async function handleCaptureAndClassify() {
+        const imageData = captureImage();
+
+        const predictions = await classifyImage(preview);
+        const filteredPredictions = filterFruitsAndVegetables(predictions);
+
+        if (filteredPredictions.length > 0) {
+          const topPrediction = filteredPredictions[0];
+          alert(
+            `Top prediction: ${topPrediction.className} (Confidence: ${(
+              topPrediction.probability * 100
+            ).toFixed(2)}%)`
+          );
+
+          // Save the result to the backend
+          const response = await fetch("http://localhost:3000/predict", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              label: topPrediction.className,
+              confidence: topPrediction.probability,
+              image: imageData,
+            }),
+          });
+
+          if (response.ok) {
+            console.log("Prediction saved successfully!");
+            fetchHistory();
+          } else {
+            console.error("Error saving prediction:", await response.text());
+          }
+        } else {
+          alert("No fruits or vegetables detected. Please try again!");
+        }
+      }
+
+      // Obtener historial desde MongoDB
+      async function fetchHistory() {
+        const response = await fetch("http://localhost:3000/predictions");
+        const history = await response.json();
+
+        const tableBody = document.getElementById("historyTable");
+        tableBody.innerHTML = ""; // Limpiar tabla
+
+        history.forEach((item) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+          <td>${item.label}</td>
+          <td>${item.confidence}%</td>
+          <td>${new Date(item.timestamp).toLocaleString()}</td>
+        `;
+          tableBody.appendChild(row);
+        });
+      }
+
+      document
+        .getElementById("capture")
+        .addEventListener("click", handleCaptureAndClassify);
+
+      // Initialize the webcam
+      startWebcam();
+      fetchHistory();
+    </script>
+  </body>
+</html>

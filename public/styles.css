@@ -1,0 +1,30 @@
+/* Help me to improve the css styles of table elements */
+/* I want to see the table with a better design */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0 auto;
+  font-size: 1.2em;
+  font-family: Arial, sans-serif;
+}
+
+th {
+  background-color: #f2f2f2;
+  color: #333;
+  font-weight: bold;
+}
+
+th, td {
+  border: 1px solid #f2f2f2;
+  padding: 8px;
+  text-align: center;
+}
+
+tr:nth-child(even) {
+  background-color: #f2f2f2;
+}
+
+tr:nth-child(odd) {
+  background-color: #f9f9f9;
+}
+
