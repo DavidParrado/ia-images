@@ -12,20 +12,21 @@
         font-family: Arial, sans-serif;
         text-align: center;
       }
-      #video {
-        width: 300px;
-        height: auto;
-        border: 2px solid #ccc;
-      }
+      #video,
       #preview {
         width: 300px;
         height: auto;
-        display: none;
+        border: 2px solid #ccc;
+        margin: 10px auto;
       }
       button {
         margin: 10px;
         padding: 10px 20px;
         font-size: 16px;
+      }
+      input[type="file"] {
+        display: block;
+        margin: 10px auto;
       }
     </style>
   </head>
@@ -33,27 +34,29 @@
     <h1>Fruit & Vegetable Classifier</h1>
     <video id="video" autoplay></video>
     <canvas id="canvas" style="display: none"></canvas>
-    <img id="preview" alt="Captured image" />
+    <img id="preview" alt="Preview image" />
     <div>
       <button id="capture">Capture & Classify</button>
+      <input type="file" id="upload" accept="image/*" />
     </div>
-    <h2>Historial de Clasificaciones</h2>
+    <h2>Classification History</h2>
     <table>
       <thead>
         <tr>
-          <th>Etiqueta</th>
-          <th>Confianza</th>
-          <th>Fecha</th>
+          <th>Label</th>
+          <th>Confidence</th>
+          <th>Date</th>
         </tr>
       </thead>
       <tbody id="historyTable">
-        <!-- Aquí se llenará el historial -->
+        <!-- Classification history will populate here -->
       </tbody>
     </table>
     <script>
       const video = document.getElementById("video");
       const canvas = document.getElementById("canvas");
       const preview = document.getElementById("preview");
+      const uploadInput = document.getElementById("upload");
 
       // Start the webcam
       async function startWebcam() {
@@ -75,6 +78,20 @@
         preview.style.display = "block";
 
         return dataUrl;
+      }
+
+      // Handle image uploads
+      function handleImageUpload(event) {
+        const file = event.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = () => {
+            preview.src = reader.result;
+            preview.style.display = "block";
+            classifyAndSave(preview);
+          };
+          reader.readAsDataURL(file);
+        }
       }
 
       // Load MobileNet and classify the image
@@ -99,17 +116,15 @@
           "orange",
           "grape",
         ];
-
         return predictions.filter((p) =>
           keywords.some((word) => p.className.toLowerCase().includes(word))
         );
       }
 
-      // Handle capture and classification
-      async function handleCaptureAndClassify() {
-        const imageData = captureImage();
-
-        const predictions = await classifyImage(preview);
+      // Classify image and save to backend
+      async function classifyAndSave(imageElement) {
+        const predictions = await classifyImage(imageElement);
+        console.log(predictions);
         const filteredPredictions = filterFruitsAndVegetables(predictions);
 
         if (filteredPredictions.length > 0) {
@@ -120,14 +135,13 @@
             ).toFixed(2)}%)`
           );
 
-          // Save the result to the backend
           const response = await fetch("http://localhost:3000/predict", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               label: topPrediction.className,
               confidence: topPrediction.probability,
-              image: imageData,
+              image: preview.src,
             }),
           });
 
@@ -142,28 +156,30 @@
         }
       }
 
-      // Obtener historial desde MongoDB
+      // Fetch history from backend
       async function fetchHistory() {
         const response = await fetch("http://localhost:3000/predictions");
         const history = await response.json();
 
         const tableBody = document.getElementById("historyTable");
-        tableBody.innerHTML = ""; // Limpiar tabla
+        tableBody.innerHTML = "";
 
         history.forEach((item) => {
           const row = document.createElement("tr");
           row.innerHTML = `
-          <td>${item.label}</td>
-          <td>${item.confidence}%</td>
-          <td>${new Date(item.timestamp).toLocaleString()}</td>
-        `;
+            <td>${item.label}</td>
+            <td>${(item.confidence * 100).toFixed(2)}%</td>
+            <td>${new Date(item.timestamp).toLocaleString()}</td>
+          `;
           tableBody.appendChild(row);
         });
       }
 
+      // Event Listeners
       document
         .getElementById("capture")
-        .addEventListener("click", handleCaptureAndClassify);
+        .addEventListener("click", () => classifyAndSave(preview));
+      uploadInput.addEventListener("change", handleImageUpload);
 
       // Initialize the webcam
       startWebcam();
